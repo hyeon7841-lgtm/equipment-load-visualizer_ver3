@@ -14,11 +14,17 @@ if "items" not in st.session_state:
 if "selected_item" not in st.session_state:
     st.session_state["selected_item"] = None
 
+# Sidebar: 캔버스 설정
+st.sidebar.subheader("캔버스 설정")
+canvas_w = st.sidebar.number_input("캔버스 가로(px)", min_value=200, max_value=5000, value=930)
+canvas_h = st.sidebar.number_input("캔버스 세로(px)", min_value=200, max_value=5000, value=615)
+grid_size = st.sidebar.number_input("그리드 크기(px)", min_value=5, max_value=200, value=20)
+
 # Sidebar: 장비 추가 폼
 with st.sidebar.form("add_equipment"):
     label = st.text_input("장비 이름", "장비X")
-    w = st.number_input("가로(mm)", min_value=10, max_value=500, value=80)
-    h = st.number_input("세로(mm)", min_value=10, max_value=500, value=60)
+    w = st.number_input("가로(mm)", min_value=10, max_value=2500, value=80)
+    h = st.number_input("세로(mm)", min_value=10, max_value=2500, value=60)
     weight = st.number_input("무게(kg)", min_value=1, max_value=10000, value=100)
     submitted = st.form_submit_button("장비 추가")
 
@@ -43,14 +49,14 @@ items_json = json.dumps(st.session_state["items"])
 component_html = f"""
 <style>
   #canvas-area {{
-    width: 930px;
-    height: 615px;
+    width: {canvas_w}px;
+    height: {canvas_h}px;
     border: 2px solid #aaa;
     position: relative;
     background: #f4f4f4;
-    background-image: linear-gradient(0deg, transparent 19px, #ccc 20px),
-                      linear-gradient(90deg, transparent 19px, #ccc 20px);
-    background-size: 20px 20px;
+    background-image: linear-gradient(0deg, transparent {grid_size-1}px, #ccc {grid_size}px),
+                      linear-gradient(90deg, transparent {grid_size-1}px, #ccc {grid_size}px);
+    background-size: {grid_size}px {grid_size}px;
     overflow: hidden;
   }}
   .item {{
@@ -152,10 +158,9 @@ items.forEach(it=>createItem(it));
 // 그리드 클릭 미리보기
 canvas.addEventListener("mousemove", function(e){{
     if(!selectedItem) return;
-    const gridSize = 20;
     const rect = canvas.getBoundingClientRect();
-    const snapX = Math.floor((e.clientX-rect.left)/gridSize)*gridSize;
-    const snapY = Math.floor((e.clientY-rect.top)/gridSize)*gridSize;
+    const snapX = Math.floor((e.clientX-rect.left)/{grid_size})*{grid_size};
+    const snapY = Math.floor((e.clientY-rect.top)/{grid_size})*{grid_size};
     if(previewDiv) previewDiv.remove();
     previewDiv = document.createElement("div");
     previewDiv.className="preview-item";
@@ -168,10 +173,9 @@ canvas.addEventListener("mousemove", function(e){{
 
 canvas.addEventListener("click", function(e){{
     if(!selectedItem) return;
-    const gridSize = 20;
     const rect = canvas.getBoundingClientRect();
-    const snapX = Math.floor((e.clientX-rect.left)/gridSize)*gridSize;
-    const snapY = Math.floor((e.clientY-rect.top)/gridSize)*gridSize;
+    const snapX = Math.floor((e.clientX-rect.left)/{grid_size})*{grid_size};
+    const snapY = Math.floor((e.clientY-rect.top)/{grid_size})*{grid_size};
     selectedItem.x = snapX;
     selectedItem.y = snapY;
     createItem(selectedItem);
@@ -179,13 +183,11 @@ canvas.addEventListener("click", function(e){{
 </script>
 """
 
-st.components.v1.html(component_html, height=650)
+st.components.v1.html(component_html, height=canvas_h+35)
 
 # 하중 분포 생성
 if st.button("하중분포 생성"):
-    canvas_w = 930
-    canvas_h = 615
-    grid = np.zeros((canvas_h, canvas_w))
+    grid_array = np.zeros((canvas_h, canvas_w))
     for it in st.session_state["items"]:
         x = int(max(0, min(canvas_w-1, float(it["x"]))))
         y = int(max(0, min(canvas_h-1, float(it["y"]))))
@@ -194,10 +196,10 @@ if st.button("하중분포 생성"):
         weight = float(it["weight"])
         x2 = min(canvas_w, x + w)
         y2 = min(canvas_h, y + h)
-        grid[y:y2, x:x2] += weight
+        grid_array[y:y2, x:x2] += weight
 
     fig, ax = plt.subplots(figsize=(9,6))
-    im = ax.imshow(grid, cmap="jet", origin="lower")
+    im = ax.imshow(grid_array, cmap="jet", origin="lower")
     ax.set_title("하중 분포 Heatmap")
     plt.colorbar(im, ax=ax)
     st.pyplot(fig)
