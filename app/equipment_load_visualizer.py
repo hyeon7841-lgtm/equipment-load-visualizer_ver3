@@ -10,6 +10,8 @@ st.title("장비 하중 배치 툴 (그리드 클릭 + 미리보기)")
 # 세션 상태 초기화
 if "items" not in st.session_state:
     st.session_state["items"] = []
+if "placed_items" not in st.session_state:
+    st.session_state["placed_items"] = []
 if "selected_item" not in st.session_state:
     st.session_state["selected_item"] = None
 
@@ -29,65 +31,68 @@ with st.sidebar.form("add_equipment"):
     if submitted:
         new_id = f"equip{len(st.session_state['items'])+1}"
         st.session_state['items'].append({
-            "id": new_id, "label": label, "x":0, "y":0, "w":w, "h":h, "weight":weight, "rot":0
+            "id": new_id, "label": label, "w":w, "h":h, "weight":weight
         })
         st.session_state["selected_item"] = st.session_state['items'][-1]
 
-# Sidebar: 장비 나열식 선택 (고유 key 적용)
+# Sidebar: 장비 나열식 선택
 st.sidebar.subheader("장비 목록")
 for it in st.session_state['items']:
     if st.sidebar.button(f"{it['label']} 선택", key=it['id']):
         st.session_state["selected_item"] = it
 
-# 선택된 장비 ID 안전하게 전달
+# 선택 장비 ID 전달
 selected_item_id = st.session_state["selected_item"]["id"] if st.session_state["selected_item"] else "null"
 
-# Canvas + JS
+# placed_items JSON
+placed_items_json = json.dumps(st.session_state["placed_items"])
 items_json = json.dumps(st.session_state["items"])
+
+# Canvas HTML + JS
 component_html = f"""
 <style>
-  #canvas-wrapper {{
-    width:100%;
-    overflow:auto;
-  }}
-  #canvas-area {{
-    border: 2px solid #aaa;
-    position: relative;
-    background: #f4f4f4;
-    background-image: linear-gradient(0deg, transparent {grid_size-1}px, #ccc {grid_size}px),
-                      linear-gradient(90deg, transparent {grid_size-1}px, #ccc {grid_size}px);
-    background-size: {grid_size}px {grid_size}px;
-    overflow: hidden;
-    transform-origin: top left;
-  }}
-  .item {{
-    position: absolute;
-    background: rgba(0,150,255,0.3);
-    color: white;
-    padding: 4px;
-    text-align: center;
-    font-size: 13px;
-    border-radius:6px;
-    cursor: grab;
-    user-select: none;
-    border: 3px solid #ff0000;
-  }}
-  .preview-item {{
-    position: absolute;
-    background: rgba(0,150,255,0.1);
-    border: 2px dashed #ff0000;
-    pointer-events: none;
-  }}
-  .rotate-btn {{
-    font-size:10px;
-    margin-top:2px;
-    cursor:pointer;
-    background:white;
-    color:black;
-    border:none;
-    padding:1px 2px;
-    border-radius:2px;
-  }}
+#canvas-wrapper {{
+  width:100%;
+  overflow:auto;
+}}
+#canvas-area {{
+  border: 2px solid #aaa;
+  position: relative;
+  background: #f4f4f4;
+  background-image: linear-gradient(0deg, transparent {grid_size-1}px, #ccc {grid_size}px),
+                    linear-gradient(90deg, transparent {grid_size-1}px, #ccc {grid_size}px);
+  background-size: {grid_size}px {grid_size}px;
+  overflow: hidden;
+  transform-origin: top left;
+}}
+.item {{
+  position: absolute;
+  background: rgba(0,150,255,0.3);
+  color: white;
+  padding: 4px;
+  text-align: center;
+  font-size: 13px;
+  border-radius:6px;
+  cursor: grab;
+  user-select: none;
+  border: 3px solid #ff0000;
+}}
+.preview-item {{
+  position: absolute;
+  background: rgba(0,150,255,0.1);
+  border: 2px dashed #ff0000;
+  pointer-events: none;
+}}
+.rotate-btn {{
+  font-size:10px;
+  margin-top:2px;
+  cursor:pointer;
+  background:white;
+  color:black;
+  border:none;
+  padding:1px 2px;
+  border-radius:2px;
+}}
 </style>
 
 <div id="canvas-wrapper">
@@ -106,6 +111,7 @@ const scale = Math.min(scaleX, scaleY, 1);
 canvas.style.transform = "scale(" + scale + ")";
 
 let items = {items_json};
+let placedItems = {placed_items_json};
 let selectedItem = null;
 if ("{selected_item_id}" !== "null") {{
     selectedItem = items.find(it => it.id == "{selected_item_id}");
@@ -141,12 +147,12 @@ function dragElement(elmnt) {{
 function createItem(it){{
   const div = document.createElement("div");
   div.className="item";
-  div.id=it.id;
+  div.id=it.id + "_placed_" + Math.random().toString(36).substr(2,5);
   div.style.left=it.x+"px";
   div.style.top=it.y+"px";
   div.style.width=it.w+"px";
   div.style.height=it.h+"px";
-  div.innerHTML=it.label+"<br><button class='rotate-btn' onclick='rotateItem(\""+it.id+"\")'>회전</button>";
+  div.innerHTML=it.label+"<br><button class='rotate-btn' onclick='rotateItem(\""+div.id+"\")'>회전</button>";
   canvas.appendChild(div);
   dragElement(div);
 }}
@@ -159,8 +165,8 @@ function rotateItem(id){{
   el.style.height = temp;
 }}
 
-// 초기 장비
-items.forEach(it=>createItem(it));
+// 초기 배치 장비
+placedItems.forEach(it=>createItem(it));
 
 // 미리보기
 canvas.addEventListener("mousemove", function(e){{
@@ -184,9 +190,17 @@ canvas.addEventListener("click", function(e){{
     const rect = canvas.getBoundingClientRect();
     const snapX = Math.floor((e.clientX-rect.left)/{grid_size})*{grid_size};
     const snapY = Math.floor((e.clientY-rect.top)/{grid_size})*{grid_size};
-    selectedItem.x = snapX;
-    selectedItem.y = snapY;
-    createItem(selectedItem);
+
+    const placed = {...selectedItem, x:snapX, y:snapY};
+    placedItems.push(placed);
+
+    createItem(placed);
+
+    // Streamlit로 업데이트
+    fetch("/_stcore/set_session_state", {{
+        method:"POST",
+        body:JSON.stringify({{key:"placed_items", value:placedItems}})
+    }});
 }});
 </script>
 """
@@ -196,12 +210,12 @@ st.components.v1.html(component_html, height=canvas_h+35)
 # 하중 분포 생성
 if st.button("하중분포 생성"):
     grid_array = np.zeros((canvas_h, canvas_w))
-    for it in st.session_state["items"]:
-        x = int(max(0, min(canvas_w-1, float(it["x"]))))
-        y = int(max(0, min(canvas_h-1, float(it["y"]))))
-        w = int(max(1, float(it["w"])))
-        h = int(max(1, float(it["h"])))  # << 괄호 문제 해결
-        weight = float(it["weight"])
+    for it in st.session_state["placed_items"]:
+        x = int(it.get("x",0))
+        y = int(it.get("y",0))
+        w = int(it.get("w",1))
+        h = int(it.get("h",1))
+        weight = float(it.get("weight",0))
         x2 = min(canvas_w, x + w)
         y2 = min(canvas_h, y + h)
         grid_array[y:y2, x:x2] += weight
