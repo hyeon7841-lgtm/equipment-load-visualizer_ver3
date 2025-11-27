@@ -2,229 +2,100 @@ import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
 import io
-import json
 
 st.set_page_config(layout="wide", page_title="Equipment Load Visualizer")
-st.title("장비 하중 배치 툴 (그리드 클릭 + 미리보기)")
+st.title("장비 하중 자동 배치 툴")
 
 # 세션 상태 초기화
 if "items" not in st.session_state:
     st.session_state["items"] = []
-if "placed_items" not in st.session_state:
-    st.session_state["placed_items"] = []
-if "selected_item" not in st.session_state:
-    st.session_state["selected_item"] = None
 
 # Sidebar: 캔버스 설정
 st.sidebar.subheader("캔버스 설정")
-canvas_w = st.sidebar.number_input("캔버스 가로(px)", min_value=200, max_value=5000, value=930)
-canvas_h = st.sidebar.number_input("캔버스 세로(px)", min_value=200, max_value=5000, value=615)
-grid_size = st.sidebar.number_input("그리드 크기(px)", min_value=5, max_value=200, value=20)
+canvas_w = st.sidebar.number_input("캔버스 가로(mm)", min_value=200, max_value=5000, value=930)
+canvas_h = st.sidebar.number_input("캔버스 세로(mm)", min_value=200, max_value=5000, value=615)
 
 # Sidebar: 장비 추가
 with st.sidebar.form("add_equipment"):
-    label = st.text_input("장비 이름", "장비X")
+    label = st.text_input("장비 이름", f"장비{len(st.session_state['items'])+1}")
     w = st.number_input("가로(mm)", min_value=10, max_value=2500, value=80)
     h = st.number_input("세로(mm)", min_value=10, max_value=2500, value=60)
     weight = st.number_input("무게(kg)", min_value=1, max_value=10000, value=100)
     submitted = st.form_submit_button("장비 추가")
     if submitted:
-        new_id = f"equip{len(st.session_state['items'])+1}"
         st.session_state['items'].append({
-            "id": new_id, "label": label, "w":w, "h":h, "weight":weight
+            "label": label, "w": w, "h": h, "weight": weight
         })
-        st.session_state["selected_item"] = st.session_state['items'][-1]
 
-# Sidebar: 장비 나열식 선택
-st.sidebar.subheader("장비 목록")
+# 자동 배치
+placed_items = []
+current_x = 0
+current_y = 0
+max_row_height = 0
+padding = 10  # 장비 사이 간격
+
 for it in st.session_state['items']:
-    if st.sidebar.button(f"{it['label']} 선택", key=it['id']):
-        st.session_state["selected_item"] = it
+    w = it['w']
+    h = it['h']
 
-# 선택 장비 ID 전달
-selected_item_id = st.session_state["selected_item"]["id"] if st.session_state["selected_item"] else "null"
+    # 다음 행으로 이동
+    if current_x + w > canvas_w:
+        current_x = 0
+        current_y += max_row_height + padding
+        max_row_height = 0
 
-# placed_items JSON
-placed_items_json = json.dumps(st.session_state["placed_items"])
-items_json = json.dumps(st.session_state["items"])
+    # 배치
+    placed_items.append({
+        "label": it['label'],
+        "x": current_x,
+        "y": current_y,
+        "w": w,
+        "h": h,
+        "weight": it['weight']
+    })
 
-# Canvas HTML + JS
-component_html = f"""
-<style>
-#canvas-wrapper {{
-  width:100%;
-  overflow:auto;
-}}
-#canvas-area {{
-  border: 2px solid #aaa;
-  position: relative;
-  background: #f4f4f4;
-  background-image: linear-gradient(0deg, transparent {grid_size-1}px, #ccc {grid_size}px),
-                    linear-gradient(90deg, transparent {grid_size-1}px, #ccc {grid_size}px);
-  background-size: {grid_size}px {grid_size}px;
-  overflow: hidden;
-  transform-origin: top left;
-}}
-.item {{
-  position: absolute;
-  background: rgba(0,150,255,0.3);
-  color: white;
-  padding: 4px;
-  text-align: center;
-  font-size: 13px;
-  border-radius:6px;
-  cursor: grab;
-  user-select: none;
-  border: 3px solid #ff0000;
-}}
-.preview-item {{
-  position: absolute;
-  background: rgba(0,150,255,0.1);
-  border: 2px dashed #ff0000;
-  pointer-events: none;
-}}
-.rotate-btn {{
-  font-size:10px;
-  margin-top:2px;
-  cursor:pointer;
-  background:white;
-  color:black;
-  border:none;
-  padding:1px 2px;
-  border-radius:2px;
-}}
-</style>
+    current_x += w + padding
+    if h > max_row_height:
+        max_row_height = h
 
-<div id="canvas-wrapper">
-  <div id="canvas-area"></div>
-</div>
+# 캔버스 시각화
+st.subheader("장비 배치 미리보기")
+fig, ax = plt.subplots(figsize=(canvas_w/100, canvas_h/100))
+ax.set_xlim(0, canvas_w)
+ax.set_ylim(0, canvas_h)
+ax.set_aspect('equal')
+ax.invert_yaxis()
+ax.set_title("장비 배치")
 
-<script>
-const wrapper = document.getElementById("canvas-wrapper");
-const canvas = document.getElementById("canvas-area");
-canvas.style.width = "{canvas_w}px";
-canvas.style.height = "{canvas_h}px";
+for it in placed_items:
+    rect = plt.Rectangle((it['x'], it['y']), it['w'], it['h'],
+                         facecolor='skyblue', edgecolor='red', linewidth=2, alpha=0.7)
+    ax.add_patch(rect)
+    ax.text(it['x'] + it['w']/2, it['y'] + it['h']/2, it['label'],
+            ha='center', va='center', fontsize=8, color='black')
 
-const scaleX = wrapper.clientWidth / {canvas_w};
-const scaleY = (window.innerHeight-150) / {canvas_h};
-const scale = Math.min(scaleX, scaleY, 1);
-canvas.style.transform = "scale(" + scale + ")";
+st.pyplot(fig)
 
-let items = {items_json};
-let placedItems = {placed_items_json};
-let selectedItem = null;
-if ("{selected_item_id}" !== "null") {{
-    selectedItem = items.find(it => it.id == "{selected_item_id}");
-}}
-
-let previewDiv = null;
-
-// 드래그
-function dragElement(elmnt) {{
-  var pos1=0,pos2=0,pos3=0,pos4=0;
-  elmnt.onmousedown = dragMouseDown;
-  function dragMouseDown(e){{
-    e.preventDefault();
-    pos3=e.clientX; pos4=e.clientY;
-    document.onmouseup=closeDragElement;
-    document.onmousemove=elementDrag;
-  }}
-  function elementDrag(e){{
-    e.preventDefault();
-    pos1=pos3-e.clientX;
-    pos2=pos4-e.clientY;
-    pos3=e.clientX; pos4=e.clientY;
-    elmnt.style.top=(elmnt.offsetTop-pos2)+"px";
-    elmnt.style.left=(elmnt.offsetLeft-pos1)+"px";
-  }}
-  function closeDragElement(){{
-    document.onmouseup=null;
-    document.onmousemove=null;
-  }}
-}}
-
-// 장비 생성
-function createItem(it){{
-  const div = document.createElement("div");
-  div.className="item";
-  div.id=it.id + "_placed_" + Math.random().toString(36).substr(2,5);
-  div.style.left=it.x+"px";
-  div.style.top=it.y+"px";
-  div.style.width=it.w+"px";
-  div.style.height=it.h+"px";
-  div.innerHTML=it.label+"<br><button class='rotate-btn' onclick='rotateItem(\""+div.id+"\")'>회전</button>";
-  canvas.appendChild(div);
-  dragElement(div);
-}}
-
-// 회전
-function rotateItem(id){{
-  const el = document.getElementById(id);
-  const temp = el.style.width;
-  el.style.width = el.style.height;
-  el.style.height = temp;
-}}
-
-// 초기 배치 장비
-placedItems.forEach(it=>createItem(it));
-
-// 미리보기
-canvas.addEventListener("mousemove", function(e){{
-    if(!selectedItem) return;
-    const rect = canvas.getBoundingClientRect();
-    const snapX = Math.floor((e.clientX-rect.left)/{grid_size})*{grid_size};
-    const snapY = Math.floor((e.clientY-rect.top)/{grid_size})*{grid_size};
-    if(previewDiv) previewDiv.remove();
-    previewDiv = document.createElement("div");
-    previewDiv.className="preview-item";
-    previewDiv.style.left = snapX + "px";
-    previewDiv.style.top = snapY + "px";
-    previewDiv.style.width = selectedItem.w + "px";
-    previewDiv.style.height = selectedItem.h + "px";
-    canvas.appendChild(previewDiv);
-}});
-
-// 클릭 → 최종 배치
-canvas.addEventListener("click", function(e){{
-    if(!selectedItem) return;
-    const rect = canvas.getBoundingClientRect();
-    const snapX = Math.floor((e.clientX-rect.left)/{grid_size})*{grid_size};
-    const snapY = Math.floor((e.clientY-rect.top)/{grid_size})*{grid_size};
-
-    const placed = {{...selectedItem, x:snapX, y:snapY}};
-    placedItems.push(placed);
-
-    createItem(placed);
-
-    fetch("/_stcore/set_session_state", {{
-        method:"POST",
-        body:JSON.stringify({{key:"placed_items", value:placedItems}})
-    }});
-}});
-</script>
-"""
-
-st.components.v1.html(component_html, height=canvas_h+35)
-
-# 하중 분포 생성
+# 하중분포 생성
 if st.button("하중분포 생성"):
     grid_array = np.zeros((canvas_h, canvas_w))
-    for it in st.session_state["placed_items"]:
-        x = int(it.get("x",0))
-        y = int(it.get("y",0))
-        w = int(it.get("w",1))
-        h = int(it.get("h",1))
-        weight = float(it.get("weight",0))
+    for it in placed_items:
+        x = int(it['x'])
+        y = int(it['y'])
+        w = int(it['w'])
+        h = int(it['h'])
+        weight = float(it['weight'])
         x2 = min(canvas_w, x + w)
         y2 = min(canvas_h, y + h)
         grid_array[y:y2, x:x2] += weight
 
-    fig, ax = plt.subplots(figsize=(9,6))
-    im = ax.imshow(grid_array, cmap="jet", origin="lower")
-    ax.set_title("하중 분포 Heatmap")
-    plt.colorbar(im, ax=ax)
-    st.pyplot(fig)
+    fig2, ax2 = plt.subplots(figsize=(canvas_w/100, canvas_h/100))
+    im = ax2.imshow(grid_array, cmap="jet", origin="lower")
+    ax2.set_title("하중 분포 Heatmap")
+    plt.colorbar(im, ax=ax2)
+    st.pyplot(fig2)
 
     buf = io.BytesIO()
-    fig.savefig(buf, format="png", dpi=200)
-    st.download_button("PNG 다운로드", data=buf.getvalue(), file_name="loadmap.png", mime="image/png")
+    fig2.savefig(buf, format="png", dpi=200)
+    st.download_button("PNG 다운로드", data=buf.getvalue(),
+                       file_name="loadmap.png", mime="image/png")
