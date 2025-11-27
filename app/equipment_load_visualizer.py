@@ -5,7 +5,7 @@ import io
 import json
 
 st.set_page_config(layout="wide", page_title="Equipment Load Visualizer")
-st.title("장비 하중 배치 툴 (클릭 배치 + 관리 + 확대/회전)")
+st.title("장비 하중 배치 툴 (클릭 배치 + 관리 + 회전/삭제)")
 
 # 세션 상태 초기화
 if "items" not in st.session_state:
@@ -59,14 +59,14 @@ if st.session_state["items"]:
 else:
     selected_item = None
 
-# 배치 초기화 (Python 세션 상태)
+# 배치 초기화
 def reset_placement():
     st.session_state["placed_items"] = []
 
 st.sidebar.button("배치 초기화", on_click=reset_placement)
 
 # 캔버스 HTML + JS
-st.subheader("장비 배치 캔버스 (클릭 배치 + 회전 + 확대/축소)")
+st.subheader("장비 배치 캔버스 (클릭 배치 + 회전/삭제 + 확대/축소)")
 
 items_json = json.dumps(st.session_state["items"])
 placed_json = json.dumps(st.session_state["placed_items"])
@@ -100,7 +100,7 @@ canvas_html = f"""
   font-size: 12px;
   pointer-events:none;
 }}
-.rotate-btn {{
+.rotate-btn, .del-btn {{
   position:absolute;
   font-size:10px;
   background:white;
@@ -137,6 +137,7 @@ function drawItems(){{
         div.style.width = it.w+'px';
         div.style.height = it.h+'px';
         div.innerHTML = it.label;
+
         // 회전 버튼
         const rotBtn = document.createElement('button');
         rotBtn.className='rotate-btn';
@@ -145,17 +146,35 @@ function drawItems(){{
         rotBtn.style.right='0px';
         rotBtn.onclick = function(e){{
             e.stopPropagation();
-            const temp = div.style.width;
-            div.style.width = div.style.height;
-            div.style.height = temp;
-            it.w = parseInt(div.style.width);
-            it.h = parseInt(div.style.height);
+            let temp = it.w;
+            it.w = it.h;
+            it.h = temp;
+            div.style.width = it.w + 'px';
+            div.style.height = it.h + 'px';
             fetch("/_stcore/set_session_state", {{
                 method:"POST",
                 body:JSON.stringify({{key:"placed_items", value:placedItems}})
             }});
         }};
         div.appendChild(rotBtn);
+
+        // 삭제 버튼
+        const delBtn = document.createElement('button');
+        delBtn.className='del-btn';
+        delBtn.style.top='0px';
+        delBtn.style.right='20px';
+        delBtn.innerHTML='✕';
+        delBtn.onclick = function(e){{
+            e.stopPropagation();
+            placedItems.splice(idx,1);
+            drawItems();
+            fetch("/_stcore/set_session_state", {{
+                method:"POST",
+                body:JSON.stringify({{key:"placed_items", value:placedItems}})
+            }});
+        }};
+        div.appendChild(delBtn);
+
         canvas.appendChild(div);
     }});
 }}
