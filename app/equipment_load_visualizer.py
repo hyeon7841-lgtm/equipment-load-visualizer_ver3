@@ -200,7 +200,7 @@ if st.button("하중분포 생성"):
         x = int(max(0, min(canvas_w-1, float(it["x"]))))
         y = int(max(0, min(canvas_h-1, float(it["y"]))))
         w = int(max(1, float(it["w"])))
-        h = int(max(1, float(it["h"]))))
+        h = int(max(1, float(it["h"])))  # << 괄호 문제 해결
         weight = float(it["weight"])
         x2 = min(canvas_w, x + w)
         y2 = min(canvas_h, y + h)
