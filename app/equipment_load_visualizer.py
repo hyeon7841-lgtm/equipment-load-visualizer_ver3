@@ -19,11 +19,10 @@ default_items = [
 if "items" not in st.session_state:
     st.session_state["items"] = default_items
 
-# 좌표 / 크기 / 무게 데이터 에디터
-df = pd.DataFrame(st.session_state["items"])
-df_display = df[["id", "label", "x", "y", "w", "h", "weight"]]
-edited = st.experimental_data_editor(df_display, num_rows="never", use_container_width=True)
-st.session_state["items"] = edited.to_dict(orient="records")
+# 장비 정보 읽기 전용 테이블
+df_display = pd.DataFrame(st.session_state["items"])[["id", "label", "x", "y", "w", "h", "weight"]]
+st.write("장비 정보 (읽기 전용)")
+st.dataframe(df_display)
 
 # HTML + JS: 드래그 + 그리드 클릭 추가
 items_json = json.dumps(st.session_state["items"])
@@ -51,6 +50,16 @@ component_html = f"""
     cursor: grab;
     user-select: none;
     border: 3px solid #ff0000;
+  }}
+  .rotate-btn {{
+    font-size:10px;
+    margin-top:2px;
+    cursor:pointer;
+    background:white;
+    color:black;
+    border:none;
+    padding:1px 2px;
+    border-radius:2px;
   }}
 </style>
 
@@ -98,7 +107,7 @@ function createItem(it) {{
   div.style.top = it.y + "px";
   div.style.width = it.w + "px";
   div.style.height = it.h + "px";
-  div.innerHTML = it.label + "<br><button onclick='rotateItem(\""+it.id+"\")'>회전</button>";
+  div.innerHTML = it.label + "<br><button class='rotate-btn' onclick='rotateItem(\""+it.id+"\")'>회전</button>";
   canvas.appendChild(div);
   dragElement(div);
 }}
