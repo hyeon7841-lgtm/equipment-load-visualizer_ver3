@@ -5,7 +5,7 @@ import io
 import json
 
 st.set_page_config(layout="wide", page_title="Equipment Load Visualizer")
-st.title("장비 하중 배치 툴 (클릭 배치 + 관리)")
+st.title("장비 하중 배치 툴 (클릭 배치 + 관리 + 확대/회전)")
 
 # 세션 상태 초기화
 if "items" not in st.session_state:
@@ -59,8 +59,13 @@ if st.session_state["items"]:
 else:
     selected_item = None
 
+# 초기화 버튼
+if st.button("배치 초기화"):
+    st.session_state["placed_items"] = []
+    st.experimental_rerun()
+
 # 캔버스 HTML + JS
-st.subheader("장비 배치 캔버스 (클릭으로 배치)")
+st.subheader("장비 배치 캔버스 (클릭 배치 + 회전 + 확대/축소)")
 
 items_json = json.dumps(st.session_state["items"])
 placed_json = json.dumps(st.session_state["placed_items"])
@@ -71,6 +76,9 @@ canvas_html = f"""
 #canvas-wrapper {{
   width:100%;
   overflow:auto;
+}}
+#canvas-controls {{
+  margin-bottom:5px;
 }}
 #canvas-area {{
   border: 2px solid #aaa;
@@ -91,7 +99,20 @@ canvas_html = f"""
   font-size: 12px;
   pointer-events:none;
 }}
+.rotate-btn {{
+  position:absolute;
+  font-size:10px;
+  background:white;
+  border:1px solid #aaa;
+  border-radius:2px;
+  cursor:pointer;
+}}
 </style>
+
+<div id="canvas-controls">
+  <button onclick="zoom(1.2)">확대</button>
+  <button onclick="zoom(0.8)">축소</button>
+</div>
 
 <div id="canvas-wrapper">
   <div id="canvas-area"></div>
@@ -101,11 +122,12 @@ canvas_html = f"""
 let items = {items_json};
 let placedItems = {placed_json};
 let selectedItemIndex = {selected_id};
+let scale = 1;
 const canvas = document.getElementById("canvas-area");
 
 function drawItems(){{
     canvas.innerHTML = '';
-    placedItems.forEach(it => {{
+    placedItems.forEach((it, idx) => {{
         const div = document.createElement('div');
         div.className='item';
         div.style.left = it.x+'px';
@@ -113,6 +135,26 @@ function drawItems(){{
         div.style.width = it.w+'px';
         div.style.height = it.h+'px';
         div.innerHTML = it.label;
+        // 회전 버튼
+        const rotBtn = document.createElement('button');
+        rotBtn.className='rotate-btn';
+        rotBtn.innerHTML='↻';
+        rotBtn.style.top='0px';
+        rotBtn.style.right='0px';
+        rotBtn.onclick = function(e){{
+            e.stopPropagation();
+            const temp = div.style.width;
+            div.style.width = div.style.height;
+            div.style.height = temp;
+            it.w = parseInt(div.style.width);
+            it.h = parseInt(div.style.height);
+            // session_state 업데이트
+            fetch("/_stcore/set_session_state", {{
+                method:"POST",
+                body:JSON.stringify({{key:"placed_items", value:placedItems}})
+            }});
+        }};
+        div.appendChild(rotBtn);
         canvas.appendChild(div);
     }});
 }}
@@ -140,6 +182,12 @@ canvas.addEventListener('click', function(e){{
         body:JSON.stringify({{key:"placed_items", value:placedItems}})
     }});
 }});
+
+function zoom(factor){{
+    scale *= factor;
+    canvas.style.transform = "scale("+scale+")";
+    canvas.style.transformOrigin = "top left";
+}}
 </script>
 """
 
