@@ -191,12 +191,11 @@ canvas.addEventListener("click", function(e){{
     const snapX = Math.floor((e.clientX-rect.left)/{grid_size})*{grid_size};
     const snapY = Math.floor((e.clientY-rect.top)/{grid_size})*{grid_size};
 
-    const placed = {...selectedItem, x:snapX, y:snapY};
+    const placed = {{...selectedItem, x:snapX, y:snapY}};
     placedItems.push(placed);
 
     createItem(placed);
 
-    // Streamlit로 업데이트
     fetch("/_stcore/set_session_state", {{
         method:"POST",
         body:JSON.stringify({{key:"placed_items", value:placedItems}})
