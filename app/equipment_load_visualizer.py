@@ -64,12 +64,13 @@ else:
 # 배치 초기화
 def reset_placement():
     st.session_state["placed_items"] = []
+    st.experimental_rerun()  # JS 캔버스 초기화 반영
 
 st.sidebar.button("배치 초기화", on_click=reset_placement)
 
-# 미리보기 캔버스 (단순화, 회전/삭제 버튼 없음)
+# 미리보기 캔버스 (회전/삭제 없음)
 st.subheader("미리보기 캔버스")
-preview_scale = min(800/canvas_w, 600/canvas_h)  # 캔버스 축소
+preview_scale = min(700/canvas_w, 500/canvas_h)  # 화면에 맞게 축소
 preview_w = int(canvas_w*preview_scale)
 preview_h = int(canvas_h*preview_scale)
 
@@ -148,7 +149,7 @@ canvas.addEventListener('click', function(e){{
 
 st.components.v1.html(canvas_html, height=preview_h+20)
 
-# 하중분포 생성 (등고선/스펙트럼)
+# 하중분포 생성 (스펙트럼 색상)
 if st.button("하중분포 생성"):
     grid_array = np.zeros((canvas_h, canvas_w))
     for it in st.session_state["placed_items"]:
@@ -161,8 +162,9 @@ if st.button("하중분포 생성"):
         y2 = min(canvas_h, y + h)
         grid_array[y:y2, x:x2] += weight
 
-    fig, ax = plt.subplots(figsize=(canvas_w/200, canvas_h/200))
-    im = ax.imshow(grid_array, cmap="jet", origin="lower")
+    # 등고선 느낌
+    fig, ax = plt.subplots(figsize=(canvas_w/250, canvas_h/250))
+    im = ax.imshow(grid_array, cmap="jet", origin="lower", vmin=0, vmax=grid_array.max())
     ax.set_title("하중 분포 Heatmap")
     plt.colorbar(im, ax=ax)
     st.pyplot(fig)
