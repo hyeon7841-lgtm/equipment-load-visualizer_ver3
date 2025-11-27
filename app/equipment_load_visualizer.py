@@ -5,7 +5,6 @@ import io
 import json
 
 st.set_page_config(layout="wide", page_title="Equipment Load Visualizer")
-
 st.title("장비 하중 배치 툴 (그리드 클릭 + 미리보기)")
 
 # 세션 상태 초기화
@@ -20,14 +19,13 @@ canvas_w = st.sidebar.number_input("캔버스 가로(px)", min_value=200, max_va
 canvas_h = st.sidebar.number_input("캔버스 세로(px)", min_value=200, max_value=5000, value=615)
 grid_size = st.sidebar.number_input("그리드 크기(px)", min_value=5, max_value=200, value=20)
 
-# Sidebar: 장비 추가 폼
+# Sidebar: 장비 추가
 with st.sidebar.form("add_equipment"):
     label = st.text_input("장비 이름", "장비X")
     w = st.number_input("가로(mm)", min_value=10, max_value=2500, value=80)
     h = st.number_input("세로(mm)", min_value=10, max_value=2500, value=60)
     weight = st.number_input("무게(kg)", min_value=1, max_value=10000, value=100)
     submitted = st.form_submit_button("장비 추가")
-
     if submitted:
         new_id = f"equip{len(st.session_state['items'])+1}"
         st.session_state['items'].append({
@@ -35,22 +33,24 @@ with st.sidebar.form("add_equipment"):
         })
         st.session_state["selected_item"] = st.session_state['items'][-1]
 
-# 현재 장비 선택
-if st.session_state['items']:
-    labels = [it["label"] for it in st.session_state['items']]
-    selected_label = st.sidebar.selectbox("편집/미리보기 장비 선택", labels)
-    st.session_state["selected_item"] = next(it for it in st.session_state['items'] if it["label"]==selected_label)
+# Sidebar: 장비 나열식 선택
+st.sidebar.subheader("장비 목록")
+for it in st.session_state['items']:
+    if st.sidebar.button(f"{it['label']} 선택"):
+        st.session_state["selected_item"] = it
 
-# 안전하게 selected_item_id 전달
+# 선택된 장비 ID 안전하게 전달
 selected_item_id = st.session_state["selected_item"]["id"] if st.session_state["selected_item"] else "null"
 
 # Canvas + JS
 items_json = json.dumps(st.session_state["items"])
 component_html = f"""
 <style>
+  #canvas-wrapper {{
+    width:100%;
+    overflow:auto;
+  }}
   #canvas-area {{
-    width: {canvas_w}px;
-    height: {canvas_h}px;
     border: 2px solid #aaa;
     position: relative;
     background: #f4f4f4;
@@ -58,6 +58,7 @@ component_html = f"""
                       linear-gradient(90deg, transparent {grid_size-1}px, #ccc {grid_size}px);
     background-size: {grid_size}px {grid_size}px;
     overflow: hidden;
+    transform-origin: top left;
   }}
   .item {{
     position: absolute;
@@ -89,41 +90,47 @@ component_html = f"""
   }}
 </style>
 
-<div id="canvas-area"></div>
+<div id="canvas-wrapper">
+  <div id="canvas-area"></div>
+</div>
 
 <script>
+const wrapper = document.getElementById("canvas-wrapper");
 const canvas = document.getElementById("canvas-area");
+canvas.style.width = "{canvas_w}px";
+canvas.style.height = "{canvas_h}px";
+
+const scaleX = wrapper.clientWidth / {canvas_w};
+const scaleY = (window.innerHeight-150) / {canvas_h};
+const scale = Math.min(scaleX, scaleY, 1);
+canvas.style.transform = `scale(${scale})`;
+
 let items = {items_json};
 let selectedItem = null;
-
 if ("{selected_item_id}" !== "null") {{
     selectedItem = items.find(it => it.id == "{selected_item_id}");
 }}
 
 let previewDiv = null;
 
-// 드래그 기능
+// 드래그
 function dragElement(elmnt) {{
   var pos1=0,pos2=0,pos3=0,pos4=0;
   elmnt.onmousedown = dragMouseDown;
-
   function dragMouseDown(e){{
     e.preventDefault();
     pos3=e.clientX; pos4=e.clientY;
     document.onmouseup=closeDragElement;
     document.onmousemove=elementDrag;
   }}
-
   function elementDrag(e){{
     e.preventDefault();
     pos1=pos3-e.clientX;
     pos2=pos4-e.clientY;
-    pos3=e.clientX;
-    pos4=e.clientY;
+    pos3=e.clientX; pos4=e.clientY;
     elmnt.style.top=(elmnt.offsetTop-pos2)+"px";
     elmnt.style.left=(elmnt.offsetLeft-pos1)+"px";
   }}
-
   function closeDragElement(){{
     document.onmouseup=null;
     document.onmousemove=null;
@@ -152,10 +159,10 @@ function rotateItem(id){{
   el.style.height = temp;
 }}
 
-// 초기 장비 생성
+// 초기 장비
 items.forEach(it=>createItem(it));
 
-// 그리드 클릭 미리보기
+// 미리보기
 canvas.addEventListener("mousemove", function(e){{
     if(!selectedItem) return;
     const rect = canvas.getBoundingClientRect();
@@ -171,6 +178,7 @@ canvas.addEventListener("mousemove", function(e){{
     canvas.appendChild(previewDiv);
 }});
 
+// 클릭 → 최종 배치
 canvas.addEventListener("click", function(e){{
     if(!selectedItem) return;
     const rect = canvas.getBoundingClientRect();
