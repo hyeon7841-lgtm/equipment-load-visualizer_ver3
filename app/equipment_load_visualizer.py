@@ -5,7 +5,7 @@ import io
 import json
 
 st.set_page_config(layout="wide", page_title="Equipment Load Visualizer")
-st.title("장비 하중 배치 툴 (클릭 배치 + 관리 + 하중분포)")
+st.title("장비 하중 배치 툴 (그리드 클릭 배치 + 관리 + 하중분포)")
 
 # 세션 상태 초기화
 if "items" not in st.session_state:
@@ -46,7 +46,6 @@ for i, it in enumerate(st.session_state["items"]):
         it['w'], it['h'] = it['h'], it['w']
 if to_remove is not None:
     st.session_state["items"].pop(to_remove)
-    st.experimental_rerun()
 
 # 선택 장비
 st.sidebar.subheader("배치할 장비 선택")
@@ -64,13 +63,12 @@ else:
 # 배치 초기화
 def reset_placement():
     st.session_state["placed_items"] = []
-    st.experimental_rerun()  # JS 캔버스 초기화 반영
 
 st.sidebar.button("배치 초기화", on_click=reset_placement)
 
-# 미리보기 캔버스 (회전/삭제 없음)
-st.subheader("미리보기 캔버스")
-preview_scale = min(700/canvas_w, 500/canvas_h)  # 화면에 맞게 축소
+# 미리보기 캔버스
+st.subheader("미리보기 캔버스 (그리드 단위 배치)")
+preview_scale = min(700/canvas_w, 500/canvas_h)
 preview_w = int(canvas_w*preview_scale)
 preview_h = int(canvas_h*preview_scale)
 
@@ -122,12 +120,12 @@ function drawItems(){{
 }}
 drawItems();
 
-// 클릭 배치
+// 클릭 배치 (그리드 단위 snap)
 canvas.addEventListener('click', function(e){{
     if(selectedItemIndex === null) return;
     const rect = canvas.getBoundingClientRect();
-    const clickX = Math.floor((e.clientX-rect.left)/{preview_scale});
-    const clickY = Math.floor((e.clientY-rect.top)/{preview_scale});
+    const clickX = Math.floor((e.clientX-rect.left)/{preview_scale}/{grid_size})*{grid_size};
+    const clickY = Math.floor((e.clientY-rect.top)/{preview_scale}/{grid_size})*{grid_size};
     const item = items[selectedItemIndex];
     const placed = {{
         label:item.label,
@@ -149,7 +147,7 @@ canvas.addEventListener('click', function(e){{
 
 st.components.v1.html(canvas_html, height=preview_h+20)
 
-# 하중분포 생성 (스펙트럼 색상)
+# 하중분포 생성 (등고선/스펙트럼)
 if st.button("하중분포 생성"):
     grid_array = np.zeros((canvas_h, canvas_w))
     for it in st.session_state["placed_items"]:
@@ -162,7 +160,6 @@ if st.button("하중분포 생성"):
         y2 = min(canvas_h, y + h)
         grid_array[y:y2, x:x2] += weight
 
-    # 등고선 느낌
     fig, ax = plt.subplots(figsize=(canvas_w/250, canvas_h/250))
     im = ax.imshow(grid_array, cmap="jet", origin="lower", vmin=0, vmax=grid_array.max())
     ax.set_title("하중 분포 Heatmap")
