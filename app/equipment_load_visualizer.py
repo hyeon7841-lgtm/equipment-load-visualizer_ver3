@@ -59,10 +59,11 @@ if st.session_state["items"]:
 else:
     selected_item = None
 
-# 초기화 버튼
-if st.button("배치 초기화"):
+# 배치 초기화 (Python 세션 상태)
+def reset_placement():
     st.session_state["placed_items"] = []
-    st.experimental_rerun()
+
+st.sidebar.button("배치 초기화", on_click=reset_placement)
 
 # 캔버스 HTML + JS
 st.subheader("장비 배치 캔버스 (클릭 배치 + 회전 + 확대/축소)")
@@ -112,6 +113,7 @@ canvas_html = f"""
 <div id="canvas-controls">
   <button onclick="zoom(1.2)">확대</button>
   <button onclick="zoom(0.8)">축소</button>
+  <button onclick="resetCanvas()">초기화</button>
 </div>
 
 <div id="canvas-wrapper">
@@ -148,7 +150,6 @@ function drawItems(){{
             div.style.height = temp;
             it.w = parseInt(div.style.width);
             it.h = parseInt(div.style.height);
-            // session_state 업데이트
             fetch("/_stcore/set_session_state", {{
                 method:"POST",
                 body:JSON.stringify({{key:"placed_items", value:placedItems}})
@@ -160,6 +161,7 @@ function drawItems(){{
 }}
 drawItems();
 
+// 캔버스 클릭으로 배치
 canvas.addEventListener('click', function(e){{
     if(selectedItemIndex === null) return;
     const rect = canvas.getBoundingClientRect();
@@ -176,12 +178,21 @@ canvas.addEventListener('click', function(e){{
     }};
     placedItems.push(placed);
     drawItems();
-    // Streamlit session state 업데이트
     fetch("/_stcore/set_session_state", {{
         method:"POST",
         body:JSON.stringify({{key:"placed_items", value:placedItems}})
     }});
 }});
+
+// 캔버스 초기화 (JS)
+function resetCanvas(){{
+    placedItems = [];
+    drawItems();
+    fetch("/_stcore/set_session_state", {{
+        method:"POST",
+        body:JSON.stringify({{key:"placed_items", value:placedItems}})
+    }});
+}}
 
 function zoom(factor){{
     scale *= factor;
