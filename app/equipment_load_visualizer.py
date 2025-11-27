@@ -33,10 +33,10 @@ with st.sidebar.form("add_equipment"):
         })
         st.session_state["selected_item"] = st.session_state['items'][-1]
 
-# Sidebar: 장비 나열식 선택
+# Sidebar: 장비 나열식 선택 (고유 key 적용)
 st.sidebar.subheader("장비 목록")
 for it in st.session_state['items']:
-    if st.sidebar.button(f"{it['label']} 선택"):
+    if st.sidebar.button(f"{it['label']} 선택", key=it['id']):
         st.session_state["selected_item"] = it
 
 # 선택된 장비 ID 안전하게 전달
