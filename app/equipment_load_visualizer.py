@@ -1,30 +1,40 @@
 import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
-import pandas as pd
 import io
 import json
 
 st.set_page_config(layout="wide", page_title="Equipment Load Visualizer")
 
-st.title("장비 하중 배치 툴 (Drag & Drop + 클릭 추가)")
+st.title("장비 하중 배치 툴 (그리드 클릭 + 미리보기)")
 
-# 기본 장비
-default_items = [
-    {"id": "equip1", "label": "장비1", "x": 10, "y": 10, "w": 80, "h": 60, "weight": 100, "rot": 0},
-    {"id": "equip2", "label": "장비2", "x": 120, "y": 10, "w": 80, "h": 60, "weight": 150, "rot": 0},
-    {"id": "equip3", "label": "장비3", "x": 230, "y": 10, "w": 80, "h": 60, "weight": 120, "rot": 0},
-]
-
+# 세션 상태 초기화
 if "items" not in st.session_state:
-    st.session_state["items"] = default_items
+    st.session_state["items"] = []
+if "selected_item" not in st.session_state:
+    st.session_state["selected_item"] = None
 
-# 장비 정보 읽기 전용 테이블
-df_display = pd.DataFrame(st.session_state["items"])[["id", "label", "x", "y", "w", "h", "weight"]]
-st.write("장비 정보 (읽기 전용)")
-st.dataframe(df_display)
+# Sidebar: 장비 추가 폼
+with st.sidebar.form("add_equipment"):
+    label = st.text_input("장비 이름", "장비X")
+    w = st.number_input("가로(mm)", 80, 10, 500)
+    h = st.number_input("세로(mm)", 60, 10, 500)
+    weight = st.number_input("무게(kg)", 100, 1, 10000)
+    submitted = st.form_submit_button("장비 추가")
+    if submitted:
+        new_id = f"equip{len(st.session_state['items'])+1}"
+        st.session_state['items'].append({
+            "id": new_id, "label": label, "x":0, "y":0, "w":w, "h":h, "weight":weight, "rot":0
+        })
+        st.session_state["selected_item"] = st.session_state['items'][-1]
 
-# HTML + JS: 드래그 + 그리드 클릭 추가
+# 현재 장비 선택
+if st.session_state['items']:
+    labels = [it["label"] for it in st.session_state['items']]
+    selected_label = st.sidebar.selectbox("편집/미리보기 장비 선택", labels)
+    st.session_state["selected_item"] = next(it for it in st.session_state['items'] if it["label"]==selected_label)
+
+# Canvas + JS
 items_json = json.dumps(st.session_state["items"])
 component_html = f"""
 <style>
@@ -51,6 +61,12 @@ component_html = f"""
     user-select: none;
     border: 3px solid #ff0000;
   }}
+  .preview-item {{
+    position: absolute;
+    background: rgba(0,150,255,0.1);
+    border: 2px dashed #ff0000;
+    pointer-events: none;
+  }}
   .rotate-btn {{
     font-size:10px;
     margin-top:2px;
@@ -68,52 +84,53 @@ component_html = f"""
 <script>
 const canvas = document.getElementById("canvas-area");
 let items = {items_json};
+let selectedItem = items.find(it=>it.id=="{st.session_state['selected_item']['id']}" );
+let previewDiv = null;
 
 // 드래그 기능
 function dragElement(elmnt) {{
-  var pos1=0, pos2=0, pos3=0, pos4=0;
+  var pos1=0,pos2=0,pos3=0,pos4=0;
   elmnt.onmousedown = dragMouseDown;
 
-  function dragMouseDown(e) {{
+  function dragMouseDown(e){{
     e.preventDefault();
-    pos3 = e.clientX;
-    pos4 = e.clientY;
-    document.onmouseup = closeDragElement;
-    document.onmousemove = elementDrag;
+    pos3=e.clientX; pos4=e.clientY;
+    document.onmouseup=closeDragElement;
+    document.onmousemove=elementDrag;
   }}
 
-  function elementDrag(e) {{
+  function elementDrag(e){{
     e.preventDefault();
-    pos1 = pos3 - e.clientX;
-    pos2 = pos4 - e.clientY;
-    pos3 = e.clientX;
-    pos4 = e.clientY;
-    elmnt.style.top = (elmnt.offsetTop - pos2) + "px";
-    elmnt.style.left = (elmnt.offsetLeft - pos1) + "px";
+    pos1=pos3-e.clientX;
+    pos2=pos4-e.clientY;
+    pos3=e.clientX;
+    pos4=e.clientY;
+    elmnt.style.top=(elmnt.offsetTop-pos2)+"px";
+    elmnt.style.left=(elmnt.offsetLeft-pos1)+"px";
   }}
 
-  function closeDragElement() {{
-    document.onmouseup = null;
-    document.onmousemove = null;
+  function closeDragElement(){{
+    document.onmouseup=null;
+    document.onmousemove=null;
   }}
 }}
 
-// 장비 생성 함수
-function createItem(it) {{
+// 장비 생성
+function createItem(it){{
   const div = document.createElement("div");
-  div.className = "item";
-  div.id = it.id;
-  div.style.left = it.x + "px";
-  div.style.top = it.y + "px";
-  div.style.width = it.w + "px";
-  div.style.height = it.h + "px";
-  div.innerHTML = it.label + "<br><button class='rotate-btn' onclick='rotateItem(\""+it.id+"\")'>회전</button>";
+  div.className="item";
+  div.id=it.id;
+  div.style.left=it.x+"px";
+  div.style.top=it.y+"px";
+  div.style.width=it.w+"px";
+  div.style.height=it.h+"px";
+  div.innerHTML=it.label+"<br><button class='rotate-btn' onclick='rotateItem(\""+it.id+"\")'>회전</button>";
   canvas.appendChild(div);
   dragElement(div);
 }}
 
 // 회전
-function rotateItem(id) {{
+function rotateItem(id){{
   const el = document.getElementById(id);
   const temp = el.style.width;
   el.style.width = el.style.height;
@@ -121,22 +138,34 @@ function rotateItem(id) {{
 }}
 
 // 초기 장비 생성
-items.forEach(it => createItem(it));
+items.forEach(it=>createItem(it));
 
-// 그리드 클릭 추가
+// 그리드 클릭 미리보기
+canvas.addEventListener("mousemove", function(e){{
+    if(!selectedItem) return;
+    const gridSize = 20;
+    const rect = canvas.getBoundingClientRect();
+    const snapX = Math.floor((e.clientX-rect.left)/gridSize)*gridSize;
+    const snapY = Math.floor((e.clientY-rect.top)/gridSize)*gridSize;
+    if(previewDiv) previewDiv.remove();
+    previewDiv = document.createElement("div");
+    previewDiv.className="preview-item";
+    previewDiv.style.left = snapX + "px";
+    previewDiv.style.top = snapY + "px";
+    previewDiv.style.width = selectedItem.w + "px";
+    previewDiv.style.height = selectedItem.h + "px";
+    canvas.appendChild(previewDiv);
+}});
+
 canvas.addEventListener("click", function(e){{
-    if(e.target.id === "canvas-area"){{
-        const gridSize = 20;
-        const rect = canvas.getBoundingClientRect();
-        const clickX = e.clientX - rect.left;
-        const clickY = e.clientY - rect.top;
-        const snapX = Math.floor(clickX/gridSize)*gridSize;
-        const snapY = Math.floor(clickY/gridSize)*gridSize;
-        const newId = "equip"+(items.length+1);
-        const newItem = {{id:newId, label:"장비"+(items.length+1), x:snapX, y:snapY, w:80, h:60, weight:100, rot:0}};
-        items.push(newItem);
-        createItem(newItem);
-    }}
+    if(!selectedItem) return;
+    const gridSize = 20;
+    const rect = canvas.getBoundingClientRect();
+    const snapX = Math.floor((e.clientX-rect.left)/gridSize)*gridSize;
+    const snapY = Math.floor((e.clientY-rect.top)/gridSize)*gridSize;
+    selectedItem.x = snapX;
+    selectedItem.y = snapY;
+    createItem(selectedItem);
 }});
 </script>
 """
