@@ -20,7 +20,7 @@ with st.sidebar.form("add_equipment"):
     w = st.number_input("가로(mm)", min_value=10, max_value=500, value=80)
     h = st.number_input("세로(mm)", min_value=10, max_value=500, value=60)
     weight = st.number_input("무게(kg)", min_value=1, max_value=10000, value=100)
-    submitted = st.form_submit_button("장비 추가")  # 반드시 필요
+    submitted = st.form_submit_button("장비 추가")
 
     if submitted:
         new_id = f"equip{len(st.session_state['items'])+1}"
@@ -34,6 +34,9 @@ if st.session_state['items']:
     labels = [it["label"] for it in st.session_state['items']]
     selected_label = st.sidebar.selectbox("편집/미리보기 장비 선택", labels)
     st.session_state["selected_item"] = next(it for it in st.session_state['items'] if it["label"]==selected_label)
+
+# 안전하게 selected_item_id 전달
+selected_item_id = st.session_state["selected_item"]["id"] if st.session_state["selected_item"] else "null"
 
 # Canvas + JS
 items_json = json.dumps(st.session_state["items"])
@@ -85,7 +88,12 @@ component_html = f"""
 <script>
 const canvas = document.getElementById("canvas-area");
 let items = {items_json};
-let selectedItem = items.find(it=>it.id=="{st.session_state['selected_item']['id']}" );
+let selectedItem = null;
+
+if ("{selected_item_id}" !== "null") {{
+    selectedItem = items.find(it => it.id == "{selected_item_id}");
+}}
+
 let previewDiv = null;
 
 // 드래그 기능
@@ -182,7 +190,7 @@ if st.button("하중분포 생성"):
         x = int(max(0,min(canvas_w-1,float(it["x"]))))
         y = int(max(0,min(canvas_h-1,float(it["y"]))))
         w = int(max(1,float(it["w"])))
-        h = int(max(1,float(it["h"])))
+        h = int(max(1,float(it["h"]))))
         weight = float(it["weight"])
         x2 = min(canvas_w, x+w)
         y2 = min(canvas_h, y+h)
