@@ -17,10 +17,11 @@ if "selected_item" not in st.session_state:
 # Sidebar: 장비 추가 폼
 with st.sidebar.form("add_equipment"):
     label = st.text_input("장비 이름", "장비X")
-    w = st.number_input("가로(mm)", 80, 10, 500)
-    h = st.number_input("세로(mm)", 60, 10, 500)
-    weight = st.number_input("무게(kg)", 100, 1, 10000)
-    submitted = st.form_submit_button("장비 추가")
+    w = st.number_input("가로(mm)", min_value=10, max_value=500, value=80)
+    h = st.number_input("세로(mm)", min_value=10, max_value=500, value=60)
+    weight = st.number_input("무게(kg)", min_value=1, max_value=10000, value=100)
+    submitted = st.form_submit_button("장비 추가")  # 반드시 필요
+
     if submitted:
         new_id = f"equip{len(st.session_state['items'])+1}"
         st.session_state['items'].append({
