@@ -4,16 +4,19 @@ import matplotlib.pyplot as plt
 import io
 
 st.set_page_config(layout="wide", page_title="Equipment Load Visualizer")
-st.title("장비 하중 자동 배치 툴")
+st.title("장비 하중 배치 툴 (관리 + 실시간 미리보기)")
 
 # 세션 상태 초기화
 if "items" not in st.session_state:
     st.session_state["items"] = []
+if "placed_items" not in st.session_state:
+    st.session_state["placed_items"] = []
 
 # Sidebar: 캔버스 설정
 st.sidebar.subheader("캔버스 설정")
 canvas_w = st.sidebar.number_input("캔버스 가로(mm)", min_value=200, max_value=5000, value=930)
 canvas_h = st.sidebar.number_input("캔버스 세로(mm)", min_value=200, max_value=5000, value=615)
+padding = 10  # 장비 간 간격
 
 # Sidebar: 장비 추가
 with st.sidebar.form("add_equipment"):
@@ -27,47 +30,34 @@ with st.sidebar.form("add_equipment"):
             "label": label, "w": w, "h": h, "weight": weight
         })
 
-# 자동 배치
-placed_items = []
-current_x = 0
-current_y = 0
-max_row_height = 0
-padding = 10  # 장비 사이 간격
+# 장비 관리
+st.sidebar.subheader("장비 목록 관리")
+to_remove = None
+for i, it in enumerate(st.session_state["items"]):
+    col1, col2 = st.sidebar.columns([3,1])
+    col1.write(f"{it['label']} ({it['w']}x{it['h']} mm, {it['weight']} kg)")
+    if col2.button("삭제", key=f"del_{i}"):
+        to_remove = i
+if to_remove is not None:
+    st.session_state["items"].pop(to_remove)
 
-for it in st.session_state['items']:
-    w = it['w']
-    h = it['h']
+# 선택 장비
+st.sidebar.subheader("배치할 장비 선택")
+selected_index = st.sidebar.radio("장비 선택", options=range(len(st.session_state["items"])),
+                                  format_func=lambda x: st.session_state["items"][x]["label"] if st.session_state["items"] else "없음")
+selected_item = st.session_state["items"][selected_index] if st.session_state["items"] else None
 
-    # 다음 행으로 이동
-    if current_x + w > canvas_w:
-        current_x = 0
-        current_y += max_row_height + padding
-        max_row_height = 0
-
-    # 배치
-    placed_items.append({
-        "label": it['label'],
-        "x": current_x,
-        "y": current_y,
-        "w": w,
-        "h": h,
-        "weight": it['weight']
-    })
-
-    current_x += w + padding
-    if h > max_row_height:
-        max_row_height = h
-
-# 캔버스 시각화
+# 배치 캔버스
 st.subheader("장비 배치 미리보기")
 fig, ax = plt.subplots(figsize=(canvas_w/100, canvas_h/100))
 ax.set_xlim(0, canvas_w)
 ax.set_ylim(0, canvas_h)
 ax.set_aspect('equal')
 ax.invert_yaxis()
-ax.set_title("장비 배치")
+ax.set_title("장비 배치 캔버스")
 
-for it in placed_items:
+# 기존 배치 장비 표시
+for it in st.session_state["placed_items"]:
     rect = plt.Rectangle((it['x'], it['y']), it['w'], it['h'],
                          facecolor='skyblue', edgecolor='red', linewidth=2, alpha=0.7)
     ax.add_patch(rect)
@@ -76,10 +66,27 @@ for it in placed_items:
 
 st.pyplot(fig)
 
+# 간단한 배치 시뮬레이션
+st.subheader("장비 배치 시뮬레이션")
+col1, col2 = st.columns([2,1])
+if selected_item:
+    x = col1.number_input("배치 X 좌표", min_value=0, max_value=canvas_w, value=0)
+    y = col1.number_input("배치 Y 좌표", min_value=0, max_value=canvas_h, value=0)
+    if col2.button("배치"):
+        st.session_state["placed_items"].append({
+            "label": selected_item["label"],
+            "w": selected_item["w"],
+            "h": selected_item["h"],
+            "weight": selected_item["weight"],
+            "x": x,
+            "y": y
+        })
+        st.experimental_rerun()  # 배치 후 화면 업데이트
+
 # 하중분포 생성
 if st.button("하중분포 생성"):
     grid_array = np.zeros((canvas_h, canvas_w))
-    for it in placed_items:
+    for it in st.session_state["placed_items"]:
         x = int(it['x'])
         y = int(it['y'])
         w = int(it['w'])
